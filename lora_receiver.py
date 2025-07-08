@@ -12,7 +12,7 @@ def loraRX_running():
     while True:
         if lora.in_waiting > 0: 
             command = lora.read(lora.in_waiting).decode('utf-8')
-            print(f"Recieved Command: {command}")
+            print(f"Received Weather Data: {command}")
             
             try:
                 if command.startswith("run "):
@@ -41,5 +41,3 @@ def loraRX_running():
         #data_read = lora.readline()#read data from other lora
         #data = data_read.decode("utf-8")#convert byte into string
         #print(data)
-
-        
