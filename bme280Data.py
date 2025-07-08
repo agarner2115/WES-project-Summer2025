@@ -41,59 +41,60 @@ axs[2].set_ylabel('Pressure (hPa)')
 axs[3].set_ylabel('Altitude (m)')
 
 print('Made it through the plots...')
-#def BME_running():
-try:
-    while True:
-        print('Reading sensor...')
-        data = read_bme280()
-        
-        # Extract values
-        temp = data.temperature
-        pressure = data.pressure
-        humidity = data.humidity
-        altitude = calculate_altitude(pressure)
-        timestamp = datetime.now()
 
-        # Append to lists
-        timestamps.append(timestamp)
-        temp_values.append(temp)
-        humidity_values.append(humidity)
-        pressure_values.append(pressure)
-        altitude_values.append(altitude)
+def BME_running():
+    try:
+        while True:
+            print('Reading sensor...')
+            data = read_bme280()
+            
+            # Extract values
+            temp = data.temperature
+            pressure = data.pressure
+            humidity = data.humidity
+            altitude = calculate_altitude(pressure)
+            timestamp = datetime.now()
 
-        # Update plots
-        for ax, values, label in zip(
-            axs,
-            [temp_values, humidity_values, pressure_values, altitude_values],
-            ['Temperature (°C)', 'Humidity (%)', 'Pressure (hPa)', 'Altitude (m)']
-        ):
-            ax.clear()
-            ax.plot(timestamps, values, label=label)
-            ax.legend()
-            ax.set_ylabel(label)
+            # Append to lists
+            timestamps.append(timestamp)
+            temp_values.append(temp)
+            humidity_values.append(humidity)
+            pressure_values.append(pressure)
+            altitude_values.append(altitude)
 
-        axs[-1].set_xlabel('Time')
-        fig.autofmt_xdate(rotation=45)
-        plt.pause(0.1)
+            # Update plots
+            for ax, values, label in zip(
+                axs,
+                [temp_values, humidity_values, pressure_values, altitude_values],
+                ['Temperature (°C)', 'Humidity (%)', 'Pressure (hPa)', 'Altitude (m)']
+            ):
+                ax.clear()
+                ax.plot(timestamps, values, label=label)
+                ax.legend()
+                ax.set_ylabel(label)
 
-        # Output to console
-        print(f"Sensor ID: {SENSOR_ID}")
-        print(f"Timestamp: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Temperature: {temp:.2f} °C")
-        print(f"Pressure: {pressure:.2f} hPa")
-        print(f"Humidity: {humidity:.2f} %")
-        print(f"Altitude: {altitude:.2f} m")
-        print("-" * 40)
+            axs[-1].set_xlabel('Time')
+            fig.autofmt_xdate(rotation=45)
+            plt.pause(0.1)
 
-        data_queue.put(data)  # Put data in the queue
-        time.sleep(10)  # Wait before next reading
+            # Output to console
+            print(f"Sensor ID: {SENSOR_ID}")
+            print(f"Timestamp: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"Temperature: {temp:.2f} °C")
+            print(f"Pressure: {pressure:.2f} hPa")
+            print(f"Humidity: {humidity:.2f} %")
+            print(f"Altitude: {altitude:.2f} m")
+            print("-" * 40)
 
-except KeyboardInterrupt:
-    print("Program stopped by user.")
-except Exception as e:
-    print(f"An unexpected error occurred: {e}")
-finally:
-    plt.ioff()
-    plt.show()
-    # This code reads data from a BME280 sensor and plots the temperature, humidity, pressure, and altitude in real-time.
-# It uses the smbus2 library for I2C communication and matplotlib for plotting.
+            data_queue.put(data)  # Put data in the queue
+            time.sleep(10)  # Wait before next reading
+
+    except KeyboardInterrupt:
+        print("Program stopped by user.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    finally:
+        plt.ioff()
+        plt.show()
+        # This code reads data from a BME280 sensor and plots the temperature, humidity, pressure, and altitude in real-time.
+    # It uses the smbus2 library for I2C communication and matplotlib for plotting.
