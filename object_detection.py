@@ -14,6 +14,8 @@ output_dir = 'detected_images'
 os.makedirs(output_dir, exist_ok=True)
 
 last_detections = []
+last_results = None
+intrinsics = None
 
 class Detection:
     def __init__(self, coords, category, conf, metadata):
@@ -23,6 +25,7 @@ class Detection:
 
 def parse_detections(metadata: dict):
     global last_detections
+    global intrinsics
     bbox_normalization = intrinsics.bbox_normalization
     bbox_order = intrinsics.bbox_order
     threshold = args.threshold
@@ -118,53 +121,57 @@ def get_args():
     return parser.parse_args()
 
 def camera_running():
-    if __name__ == "__main__":
-        args = get_args()
+    print("CAMERAAAAAA")
+    #if __name__ == "__main__":
+    print("Camera Started")
+    args = get_args()
 
-        imx500 = IMX500(args.model)
-        intrinsics = imx500.network_intrinsics
-        if not intrinsics:
-            intrinsics = NetworkIntrinsics()
-            intrinsics.task = "object detection"
-        elif intrinsics.task != "object detection":
-            print("Network is not an object detection task", file=sys.stderr)
-            exit()
+    imx500 = IMX500(args.model)
+    intrinsics = imx500.network_intrinsics
+    if not intrinsics:
+        intrinsics = NetworkIntrinsics()
+        intrinsics.task = "object detection"
+    elif intrinsics.task != "object detection":
+        print("Network is not an object detection task", file=sys.stderr)
+        exit()
 
-        for key, value in vars(args).items():
-            if key == 'labels' and value is not None:
-                with open(value, 'r') as f:
-                    intrinsics.labels = f.read().splitlines()
-            elif hasattr(intrinsics, key) and value is not None:
-                setattr(intrinsics, key, value)
-
-        if intrinsics.labels is None:
-            with open("assets/coco_labels.txt", "r") as f:
+    for key, value in vars(args).items():
+        if key == 'labels' and value is not None:
+            with open(value, 'r') as f:
                 intrinsics.labels = f.read().splitlines()
-        intrinsics.update_with_defaults()
+        elif hasattr(intrinsics, key) and value is not None:
+            setattr(intrinsics, key, value)
 
-        if args.print_intrinsics:
-            print(intrinsics)
-            exit()
+    if intrinsics.labels is None:
+        with open("assets/coco_labels.txt", "r") as f:
+            intrinsics.labels = f.read().splitlines()
+    intrinsics.update_with_defaults()
 
-        picam2 = Picamera2(imx500.camera_num)
-        config = picam2.create_preview_configuration(controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
+    if args.print_intrinsics:
+        print(intrinsics)
+        exit()
 
-        imx500.show_network_fw_progress_bar()
-        picam2.start(config, show_preview=True)
+    picam2 = Picamera2(imx500.camera_num)
+    config = picam2.create_preview_configuration(controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
 
-        if intrinsics.preserve_aspect_ratio:
-            imx500.set_auto_aspect_ratio()
+    imx500.show_network_fw_progress_bar()
+    picam2.start(config, show_preview=True)
 
-        last_results = None
-        picam2.pre_callback = draw_detections
+    if intrinsics.preserve_aspect_ratio:
+        imx500.set_auto_aspect_ratio()
 
-        # Add the try-except block here
-        try:
-            while True:
-                last_results = parse_detections(picam2.capture_metadata())
-                time.sleep(5) #Pause execution for 5 seconds to allow for detection processing
-        except KeyboardInterrupt:
-            print("Exiting gracefully...")
-        finally:
-            cv2.destroyAllWindows()
-            print("Cleanup done.")
+    last_results = None
+    picam2.pre_callback = draw_detections
+
+    # Add the try-except block here
+    try:
+        while True:
+            print("Trying to detect")
+            last_results = parse_detections(picam2.capture_metadata())
+            print("possibly detected")
+            time.sleep(5) #Pause execution for 5 seconds to allow for detection processing
+    except KeyboardInterrupt:
+        print("Exiting gracefully...")
+    finally:
+        cv2.destroyAllWindows()
+        print("Cleanup done.")
