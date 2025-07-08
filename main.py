@@ -17,8 +17,9 @@ from object_detection import camera_running
 
 def main():
     #Create threads for each task
-    bme_thread = threading.Thread(target=BME_running, args=(data_queue,), name="BME280 Thread")
-    lora_tx_thread = threading.Thread(target=loraTX_running, args=(data_queue,),name="LoRa Transmitter Thread")
+    #bme_thread = threading.Thread(target=BME_running, args=(data_queue,), name="BME280 Thread")
+    bme_thread = threading.Thread(target=BME_running, name="BME280 Thread")
+    lora_tx_thread = threading.Thread(target=loraTX_running, name="LoRa Transmitter Thread")
     camera_thread = threading.Thread(target=camera_running, name="Camera Thread")
 
     #Start threads
