@@ -11,7 +11,7 @@ lora = serial.Serial(port='/dev/ttyS0', baudrate=9600, parity=serial.PARITY_NONE
 '''For Raspberry Pi 5'''
 # lora = serial.Serial(port='/dev/ttyAMA0', baudrate=9600, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=1)
 
-def loraTX_running():
+def loraTX_running(stop_event):
     try:
         while not stop_event.is_set():
                 if not data_queue.empty():
