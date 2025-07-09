@@ -13,9 +13,11 @@ from picamera2.devices.imx500 import (NetworkIntrinsics, postprocess_nanodet_det
 output_dir = 'detected_images'
 os.makedirs(output_dir, exist_ok=True)
 
+# Global variables
 last_detections = []
 last_results = None
 intrinsics = None
+picam2 = None  # Needed for Detection class
 
 class Detection:
     def __init__(self, coords, category, conf, metadata):
@@ -24,8 +26,7 @@ class Detection:
         self.box = imx500.convert_inference_coords(coords, metadata, picam2)
 
 def parse_detections(metadata: dict):
-    global last_detections
-    global intrinsics
+    global last_detections, intrinsics
     bbox_normalization = intrinsics.bbox_normalization
     bbox_order = intrinsics.bbox_order
     threshold = args.threshold
@@ -34,8 +35,10 @@ def parse_detections(metadata: dict):
 
     np_outputs = imx500.get_outputs(metadata, add_batch=True)
     input_w, input_h = imx500.get_input_size()
+
     if np_outputs is None:
         return last_detections
+
     if intrinsics.postprocess == "nanodet":
         boxes, scores, classes = postprocess_nanodet_detection(outputs=np_outputs[0], conf=threshold, iou_thres=iou,
                                                                max_out_dets=max_detections)[0]
@@ -65,10 +68,12 @@ def get_labels():
     return labels
 
 def draw_detections(request, stream="main"):
+    global last_results
     detections = last_results
     if detections is None:
         return
     labels = get_labels()
+
     with MappedArray(request, stream) as m:
         for detection in detections:
             x, y, w, h = detection.box
@@ -77,57 +82,50 @@ def draw_detections(request, stream="main"):
             # Draw the detection box and label
             cv2.rectangle(m.array, (x, y), (x + w, y + h), (0, 255, 0), thickness=2)
             cv2.putText(m.array, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-            
+
             # Print the detected object and its confidence
             print(f"Detected {labels[int(detection.category)]} with confidence {detection.conf:.2f}")
-            
-            # Save the frame if a specific object is detected (e.g., "person") with confidence >= 0.7
-            if detection.conf >= 0.7:  # Ensure this line is indented with spaces
-                save_detected_image(m.array, detection.conf, labels[int(detection.category)])  # Use the correct attribute
+
+            # Save the frame if confidence is high
+            if detection.conf >= 0.7:
+                save_detected_image(m.array, detection.conf, labels[int(detection.category)])
 
 def save_detected_image(frame, confidence, category):
     import re
-    import os
-    import time
 
-    # Sanitize the category name to create a valid filename
     sanitized_category = re.sub(r'[^a-zA-Z0-9_.-]', '_', category)
-    
-    # Create the image path with category, timestamp, and confidence
     image_path = os.path.join(output_dir, f'detected_{sanitized_category}_{int(time.time())}_{int(confidence * 100)}.jpg')
-    
-    # Save the image
+
     if cv2.imwrite(image_path, frame):
         print(f"Image saved: {image_path}")
     else:
         print(f"Failed to save image: {image_path}")
 
-
-
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, help="Path of the model",
+    parser.add_argument("--model", type=str,
                         default="/usr/share/imx500-models/imx500_network_ssd_mobilenetv2_fpnlite_320x320_pp.rpk")
-    parser.add_argument("--fps", type=int, help="Frames per second")
-    parser.add_argument("--threshold", type=float, default=0.55, help="Detection threshold")
-    parser.add_argument("--iou", type=float, default=0.65, help="Set IoU threshold")
-    parser.add_argument("--max-detections", type=int, default=10, help="Set max detections")
-    parser.add_argument("--ignore-dash-labels", action=argparse.BooleanOptionalAction, help="Remove '-' labels ")
-    parser.add_argument("--postprocess", choices=["", "nanodet"], default=None, help="Run post process of type")
-    parser.add_argument("-r", "--preserve-aspect-ratio", action=argparse.BooleanOptionalAction,
-                        help="Preserve the pixel aspect ratio of the input tensor")
-    parser.add_argument("--labels", type=str, help="Path to the labels file")
-    parser.add_argument("--print-intrinsics", action="store_true", help="Print JSON network_intrinsics then exit")
+    parser.add_argument("--fps", type=int)
+    parser.add_argument("--threshold", type=float, default=0.55)
+    parser.add_argument("--iou", type=float, default=0.65)
+    parser.add_argument("--max-detections", type=int, default=10)
+    parser.add_argument("--ignore-dash-labels", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--postprocess", choices=["", "nanodet"], default=None)
+    parser.add_argument("-r", "--preserve-aspect-ratio", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--labels", type=str)
+    parser.add_argument("--print-intrinsics", action="store_true")
     return parser.parse_args()
 
-def camera_running(stop_event):
+def camera_running():
     print("CAMERAAAAAA")
-    #if __name__ == "__main__":
     print("Camera Started")
+    global picam2, last_results, intrinsics, args
+
     args = get_args()
 
     imx500 = IMX500(args.model)
     intrinsics = imx500.network_intrinsics
+
     if not intrinsics:
         intrinsics = NetworkIntrinsics()
         intrinsics.task = "object detection"
@@ -152,7 +150,8 @@ def camera_running(stop_event):
         exit()
 
     picam2 = Picamera2(imx500.camera_num)
-    config = picam2.create_preview_configuration(controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
+    config = picam2.create_preview_configuration(
+        controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
 
     imx500.show_network_fw_progress_bar()
     picam2.start(config, show_preview=True)
@@ -160,16 +159,13 @@ def camera_running(stop_event):
     if intrinsics.preserve_aspect_ratio:
         imx500.set_auto_aspect_ratio()
 
-    last_results = None
     picam2.pre_callback = draw_detections
 
-    # Add the try-except block here
     try:
-        while not stop_event.is_set():
-            print("Trying to detect")
+        while True:
+            print("Trying to detect...")
             last_results = parse_detections(picam2.capture_metadata())
-            print("possibly detected")
-            time.sleep(5) #Pause execution for 5 seconds to allow for detection processing
+            time.sleep(5)
     except KeyboardInterrupt:
         print("Exiting gracefully...")
     finally:
