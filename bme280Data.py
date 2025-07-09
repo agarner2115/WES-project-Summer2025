@@ -45,7 +45,6 @@ print('Made it through the plots...')
 def BME_running(stop_event):
     try:
         while not stop_event.is_set():
-            while True:
                 print('Reading sensor...')
                 data = read_bme280()
                 
@@ -96,4 +95,3 @@ def BME_running(stop_event):
     except Exception as e:
         print(f"A BME280 error has occurred: {e}")
         #This code reads data from a BME280 sensor and plots the temperature, humidity, pressure, and altitude in real-time.
-    #It uses the smbus2 library for I2C communication and matplotlib for plotting.
