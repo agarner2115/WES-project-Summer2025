@@ -120,7 +120,7 @@ def get_args():
     parser.add_argument("--print-intrinsics", action="store_true", help="Print JSON network_intrinsics then exit")
     return parser.parse_args()
 
-def camera_running():
+def camera_running(stop_event):
     print("CAMERAAAAAA")
     #if __name__ == "__main__":
     print("Camera Started")
