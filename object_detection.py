@@ -165,7 +165,7 @@ def camera_running():
 
     # Add the try-except block here
     try:
-        while True:
+        while not stop_event.is_set():
             print("Trying to detect")
             last_results = parse_detections(picam2.capture_metadata())
             print("possibly detected")
