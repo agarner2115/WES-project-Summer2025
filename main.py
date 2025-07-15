@@ -1,9 +1,11 @@
 import threading
 import os
 import sys
+import queue
 from queue import Empty
 import csv
 import time
+from shared_resources import data_queue, stop_event
 
 #Shared data queue
 data_queue = queue.Queue()
@@ -13,7 +15,7 @@ i2c_lock = threading.Lock() # Lock for I2C communication
 
 #Import functions from other modules
 from shared_resources import data_queue
-from bme280Data import BME_running
+from bme280Data import BME_running, calculate_altitude
 from lora_transmitter import loraTX_running
 from object_detection import camera_running
 
@@ -53,21 +55,22 @@ def main():
 
     #Start threads
     bme_thread.start()
-    lora_tx_thread.start()
+    loraTX_thread.start()
     camera_thread.start()
     logger_thread.start()
 
     try:
             while True:
                 time.sleep(1)
-        except KeyboardInterrupt:
+    except KeyboardInterrupt:
             print("Stopping system...")
             stop_event.set()
     
     #Wait for threads to complete
     bme_thread.join()
-    lora_tx_thread.join()
+    loraTX_thread.join()
     camera_thread.join()
+    logger_thread.join()
     print("System shutdown complete.")
 
 if __name__ == "__main__":
