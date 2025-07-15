@@ -23,7 +23,7 @@ class Detection:
     def __init__(self, coords, category, conf, metadata):
         self.category = category
         self.conf = conf
-        self.box = imx500.convert_inference_coords(coords, metadata, picam2)
+        self.box = IMX500.convert_inference_coords(coords, metadata, picam2)
 
 def parse_detections(metadata: dict):
     global last_detections, intrinsics
@@ -33,8 +33,17 @@ def parse_detections(metadata: dict):
     iou = args.iou
     max_detections = args.max_detections
 
-    np_outputs = imx500.get_outputs(metadata, add_batch=True)
-    input_w, input_h = imx500.get_input_size()
+    # Check the structure of metadata
+    print("Metadata:", metadata)  # Debugging line
+
+    # Ensure that metadata is passed correctly
+    try:
+        np_outputs = IMX500.get_outputs(metadata, add_batch=True)  # Adjust if more parameters are needed
+    except TypeError as e:
+        print(f"Error calling get_outputs: {e}")  # Debugging line
+        return last_detections
+
+    input_w, input_h = IMX500.get_input_size()
 
     if np_outputs is None:
         return last_detections
@@ -116,7 +125,7 @@ def get_args():
     parser.add_argument("--print-intrinsics", action="store_true")
     return parser.parse_args()
 
-def camera_running():
+def camera_running(stop_event):
     print("CAMERAAAAAA")
     print("Camera Started")
     global picam2, last_results, intrinsics, args
@@ -164,7 +173,10 @@ def camera_running():
     try:
         while True:
             print("Trying to detect...")
-            last_results = parse_detections(picam2.capture_metadata())
+            #Capture metadata from the camera
+            metadata = picam2.capture_metadata()
+            #Pass the metadata to parse_detections
+            last_results = parse_detections(metadata)
             time.sleep(5)
     except KeyboardInterrupt:
         print("Exiting gracefully...")
