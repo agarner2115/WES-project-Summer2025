@@ -25,7 +25,7 @@ def loraTX_running(stop_event):
                 lora.write(b)  #Send the data to the other LoRa
                 print(f"Sent: {data}")
             
-            time.sleep(0.2)  # Delay of 200ms
+                time.sleep(20)  # Delay of 200ms
 
-except Exception as e:
+    except Exception as e:
         print(f"[LoRa TX] Error: {e}")
