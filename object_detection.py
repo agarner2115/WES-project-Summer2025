@@ -15,17 +15,20 @@ os.makedirs(output_dir, exist_ok=True)
 
 # Global variables
 last_detections = []
+imx500 = None
+picam2 = None
 last_results = None
 intrinsics = None
 picam2 = None  # Needed for Detection class
 
 class Detection:
-    def __init__(self, coords, category, conf, metadata):
+    def __init__(self, coords, category, conf, metadata, imx500_instance, picam2_instance):
         self.category = category
         self.conf = conf
-        self.box = IMX500.convert_inference_coords(coords, metadata, picam2)
+        self.box = imx500_instance.convert_inference_coords(coords, metadata, picam2_instance)
 
-def parse_detections(metadata: dict):
+def parse_detections(metadata: dict, imx500):
+   
     global last_detections, intrinsics
     bbox_normalization = intrinsics.bbox_normalization
     bbox_order = intrinsics.bbox_order
@@ -38,12 +41,12 @@ def parse_detections(metadata: dict):
 
     # Ensure that metadata is passed correctly
     try:
-        np_outputs = IMX500.get_outputs(metadata, add_batch=True)  # Adjust if more parameters are needed
+        np_outputs = imx500.get_outputs(metadata, add_batch=True)  # Adjust if more parameters are needed
     except TypeError as e:
         print(f"Error calling get_outputs: {e}")  # Debugging line
         return last_detections
 
-    input_w, input_h = IMX500.get_input_size()
+    input_w, input_h = imx500.get_input_size()
 
     if np_outputs is None:
         return last_detections
@@ -63,7 +66,7 @@ def parse_detections(metadata: dict):
         boxes = zip(*boxes)
 
     last_detections = [
-        Detection(box, category, score, metadata)
+        Detection(box, category, score, metadata, imx500, picam2)
         for box, score, category in zip(boxes, scores, classes)
         if score > threshold
     ]
@@ -126,60 +129,91 @@ def get_args():
     return parser.parse_args()
 
 def camera_running(stop_event):
-    print("CAMERAAAAAA")
-    print("Camera Started")
-    global picam2, last_results, intrinsics, args
+    print("[Camera] Starting camera thread...")
+
+    global picam2, last_results, intrinsics, args, imx500
 
     args = get_args()
 
     imx500 = IMX500(args.model)
-    intrinsics = imx500.network_intrinsics
-
-    if not intrinsics:
-        intrinsics = NetworkIntrinsics()
-        intrinsics.task = "object detection"
-    elif intrinsics.task != "object detection":
-        print("Network is not an object detection task", file=sys.stderr)
-        exit()
-
-    for key, value in vars(args).items():
-        if key == 'labels' and value is not None:
-            with open(value, 'r') as f:
-                intrinsics.labels = f.read().splitlines()
-        elif hasattr(intrinsics, key) and value is not None:
-            setattr(intrinsics, key, value)
+    intrinsics = imx500.network_intrinsics or NetworkIntrinsics()
+    intrinsics.task = "object detection"
+    intrinsics.update_with_defaults()
 
     if intrinsics.labels is None:
         with open("assets/coco_labels.txt", "r") as f:
             intrinsics.labels = f.read().splitlines()
-    intrinsics.update_with_defaults()
-
-    if args.print_intrinsics:
-        print(intrinsics)
-        exit()
 
     picam2 = Picamera2(imx500.camera_num)
     config = picam2.create_preview_configuration(
         controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
-
-    imx500.show_network_fw_progress_bar()
-    picam2.start(config, show_preview=True)
-
-    if intrinsics.preserve_aspect_ratio:
-        imx500.set_auto_aspect_ratio()
-
-    picam2.pre_callback = draw_detections
+    picam2.start(config)
 
     try:
-        while True:
-            print("Trying to detect...")
-            #Capture metadata from the camera
-            metadata = picam2.capture_metadata()
-            #Pass the metadata to parse_detections
-            last_results = parse_detections(metadata)
-            time.sleep(5)
-    except KeyboardInterrupt:
-        print("Exiting gracefully...")
+        while not stop_event.is_set():
+            request = picam2.capture_request()
+            metadata = request.get_metadata()
+
+            # Get model outputs
+            np_outputs = imx500.get_outputs(metadata, add_batch=True)
+            if np_outputs is None:
+                print("[Camera] No outputs from model.")
+                request.release()
+                continue
+
+            input_w, input_h = imx500.get_input_size()
+
+            # Postprocess detections
+            if intrinsics.postprocess == "nanodet":
+                boxes, scores, classes = postprocess_nanodet_detection(
+                    outputs=np_outputs[0], conf=args.threshold, iou_thres=args.iou,
+                    max_out_dets=args.max_detections)[0]
+                from picamera2.devices.imx500.postprocess import scale_boxes
+                boxes = scale_boxes(boxes, 1, 1, input_h, input_w, False, False)
+            else:
+                boxes, scores, classes = np_outputs[0][0], np_outputs[1][0], np_outputs[2][0]
+                if intrinsics.bbox_normalization:
+                    boxes = boxes / input_h
+                if intrinsics.bbox_order == "xy":
+                    boxes = boxes[:, [1, 0, 3, 2]]
+                boxes = np.array_split(boxes, 4, axis=1)
+                boxes = zip(*boxes)
+
+            detections = []
+            for box, score, category in zip(boxes, scores, classes):
+                if score > args.threshold:
+                    det = Detection(box, category, score, metadata, imx500, picam2)
+                    detections.append(det)
+
+            if not detections:
+                print("[Camera] No objects detected.")
+            else:
+                print(f"[Camera] {len(detections)} object(s) detected.")
+
+            # Draw detections and save images
+            with MappedArray(request, "main") as m:
+                for det in detections:
+                    x, y, w, h = det.box
+                    label = f"{intrinsics.labels[int(det.category)]} ({det.conf:.2f})"
+                    cv2.rectangle(m.array, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    cv2.putText(m.array, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+                    print(f"Detected {intrinsics.labels[int(det.category)]} with confidence {det.conf:.2f}")
+
+                    if det.conf >= 0.6:
+                        filename = f"detected_{intrinsics.labels[int(det.category)]}_{int(time.time())}_{int(det.conf*100)}.jpg"
+                        filepath = os.path.join(output_dir, filename)
+                        cv2.imwrite(filepath, m.array)
+                        print(f"Image saved: {filepath}")
+
+            request.release()
+
+            time.sleep(1)  # Wait before next detection
+
+    except Exception as e:
+        print(f"[Camera] Exception: {e}")
+
     finally:
+        print("[Camera] Cleaning up...")
+        picam2.stop()
         cv2.destroyAllWindows()
-        print("Cleanup done.")
