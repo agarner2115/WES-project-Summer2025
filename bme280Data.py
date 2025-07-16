@@ -35,7 +35,6 @@ def BME_running(stop_event):
     try:
         while not stop_event.is_set():
                 print('Reading sensor...')
-                data = read_bme280()
                 
                 #Extract values
                 temperature, pressure, humidity = read_bme280()  # Unpack the tuple
