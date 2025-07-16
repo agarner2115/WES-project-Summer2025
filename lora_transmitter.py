@@ -4,6 +4,7 @@ import serial
 from shared_resources import data_queue
 from bme280Data import read_bme280, calculate_altitude  # Import the functions to read from the BME280 sensor and calculate altitude
 
+
 # Uncomment suitable line for your Pi and comment the other which is not required 
 '''For Raspberry Pi 4 & 3'''
 lora = serial.Serial(port='/dev/ttyS0', baudrate=9600, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=1)
@@ -14,11 +15,31 @@ lora = serial.Serial(port='/dev/ttyS0', baudrate=9600, parity=serial.PARITY_NONE
 def loraTX_running(stop_event):
     try:
         while not stop_event.is_set():
-                if not data_queue.empty():
-                    data = data_queue.get()
-                #Get weather data from the BME280 sensor
+                if data_queue.empty():
+                        print("[LoRa TX] No object detections in queue.")
+                while not data_queue.empty():
+                        detection = data_queue.empty():
+                        label = detection.get('label', None)
+                        conf = detection.get('confidence', None)
+                        image_path = detection.get('image_path', None)
+                        
+                        if label is None or conf is None
+                                print(f"[LoRa TX] Warning: Incomplete detection data: {detection}")
+                                continue
+                        
+                        message = f"Detected: {label}, Confidence: {conf:.2f}"
+                        if image_path:
+                                message += f", Image: {image_path.split('/')[-1]}"
+                        
+                        print(f"[LoRa TX] Sending detection message: {message}")
+                        message = data_queue.get()
+                        lora.write(message.encode('utf-8'))
+                        print(f"[LoRa Tx] Sent detection : {message.scrip()}")
+                        time.sleep(1)
+
                 temperature, pressure, humidity = read_bme280()  # Assuming this function returns temperature, pressure, and humidity
                 altitude = calculate_altitude(pressure)  #Calculate altitude based on pressure
+             
                 #Format the data as a string
                 data = f"Temperature: {temperature}°C, Pressure: {pressure} hPa, Humidity: {humidity}%, Altitude: {altitude} m"
                 b = bytes(data, 'utf-8')  #Convert string into bytes
