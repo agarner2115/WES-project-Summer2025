@@ -4,4 +4,5 @@ import threading
 
 # Shared data queue
 data_queue = queue.Queue()
+ai_data_queue = queue.Queue()
 stop_event = threading.Event()
