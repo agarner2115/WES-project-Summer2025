@@ -33,9 +33,9 @@ def log_to_csv(timestamp, temp, humidity, pressure, altitude):
 		writer.writerow([timestamp.strftime("%Y-%m-%d %H:%M:%S"), temp, humidity, pressure, altitude])
 
 def log_ai_detection_to_csv(timestamp, detected_object, confidence):
-	with open(ai_csv_filename, mode='w', newline='') as file:
+	with open(ai_csv_filename, mode='a', newline='') as file:
 		writer = csv.writer(file)
-		writer.writerow([timestamp.strftime("%Y-%m-%d %H:%M:%S"), detected_objects, confidence])
+		writer.writerow([timestamp.strftime("%Y-%m-%d %H:%M:%S"), detected_object, confidence])
 
 #Live Plot Setup
 plt.ion()
@@ -52,7 +52,7 @@ def update_plot():
 	for ax, values, label in zip(
 		axs,
 		[temp_values, humidity_values, pressure_values, altitude_values],
-		['Temperature (C)', 'Humidity (%)', 'Pressure (hPa)', 'Altitude (m)']
+		['Temperature (°C)', 'Humidity (%)', 'Pressure (hPa)', 'Altitude (m)']
 	):
 		ax.clear()
 		ax.plot(timestamps, values, label=label, color='tab:blue')
@@ -76,7 +76,7 @@ def parse_and_plot(data_line: str):
 		humidity = float(parts[2].split(':')[1].replace('%', '').strip())
 		altitude = float(parts[3].split(':')[1].replace('m', '').strip())
 		
-		timestamp = dateime.now()
+		timestamp = datetime.now()
 		
 		#Store and trim history
 		timestamps.append(timestamp)
@@ -106,19 +106,22 @@ def parse_and_plot(data_line: str):
 	except Exception as e:
 		print(f"[Plotter] An unexpected error occurred during parsing and plotting: {e} for input '{data_line}'")
 
-def handle_ai_detection(ai_message: str):
+def handle_ai_detection(ai_message_string: str):
 	try:
-		content = ai_message.replace("AI_DETECTION: ", "").strip()
+		content = ai_message_string.replace("AI_DETECTION: ", "").strip()
 		parts = content.split(', ')
 		
 		if len(parts) < 2:
-			raise ValueError(f"Incomplete AI Detection '{ai_message}'")
+			raise ValueError(f"Incomplete AI Detection: Expected 2 parts, go {len(parts)} from '{ai_message_string}'")
 		
 		detected_object = parts[0].replace("Object: ", "").strip()
 		confidence_str = parts[1].replace("Confidence: ", "").strip()
 		confidence = float(confidence_str)
 		
 		timestamp = datetime.now()
+		
+		print(f"[AI Detector] Detected: '{detected_object}' with Confidence: {confidence:.2f} at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+		log_ai_detection_to_csv(timestamp, detected_object, confidence)
 		
 	except ValueError as ve:
 		print(f"[AI Detector] Parsing error: {ve} for input '{ai_message}'")
