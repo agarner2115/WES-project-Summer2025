@@ -2,8 +2,7 @@
 import time
 import serial
 from shared_resources import data_queue, ai_data_queue, stop_event
-from bme280Data import read_bme280, calculate_altitude  # Import the functions to read from the BME280 sensor and calculate altitude
-
+from bme280Data import BME_running, read_bme280, calculate_altitude
 
 # Uncomment suitable line for your Pi and comment the other which is not required 
 '''For Raspberry Pi 4 & 3'''
@@ -13,6 +12,7 @@ def loraTX_running(stop_event):
     try:
         while not stop_event.is_set():
                 message_sent = False
+                
                 if not ai_data_queue.empty():
                         ai_data_to_send = ai_data_queue.get()
                         b = bytes(ai_data_to_send, 'utf-8')
@@ -22,23 +22,31 @@ def loraTX_running(stop_event):
                         
                 elif not data_queue.empty():
                         sensor_data_obj = data_queue.get()
+                        print("SENDING:", {sensor_data_obj})
 
                         data_to_send = (
                                 f"Temperature: {sensor_data_obj.temperature:.2f}°C, "
                                 f"Pressure: {sensor_data_obj.pressure:.2f} hPa, "
-                                f"Humidity: {sensor_data_obj.altitude:.2f}%, "
+                                f"Humidity: {sensor_data_obj.humidity:.2f}%, "
                                 f"Altitude: {sensor_data_obj.altitude:.2f} m"
                         )
              
                         #Format the data as a string
-                        b = bytes(data, 'utf-8')  #Convert string into bytes
+                        b = bytes(data_to_send, 'utf-8')  #Convert string into bytes
                         lora.write(b)  #Send the data to the other LoRa
                         print(f"Sent BME280 Data: {data_to_send}")
                         message_sent = True
                 if not message_sent:
                         time.sleep(1)
-                
-                time.sleep(10)  # Delay of 200ms
 
     except Exception as e:
         print(f"[LoRa TX] Error: {e}")
+
+if __name__ == "__main__":
+        local_stop_event = threading.Event()
+        try:
+                loraTX_running(local_stop_event)
+        except KeyboardInterrupt:
+                print("Main script received KeyboardInterrupt.")
+                local_stop_event.set()
+        print("Transmitter script finished.")
