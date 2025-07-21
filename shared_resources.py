@@ -3,6 +3,7 @@ import queue
 import threading
 
 # Shared data queue
-data_queue = queue.Queue()
+data_queue = queue.Queue(maxsize=100)
 ai_data_queue = queue.Queue()
+csv_queue = queue.Queue()
 stop_event = threading.Event()

@@ -9,6 +9,10 @@ from picamera2 import MappedArray, Picamera2
 from picamera2.devices import IMX500
 from picamera2.devices.imx500 import (NetworkIntrinsics, postprocess_nanodet_detection)
 
+#Needed for transmitting queue data to ground station
+import queue
+from shared_resources import ai_data_queue, stop_event
+
 # Create the detected_images directory if it doesn't exist
 output_dir = 'detected_images'
 os.makedirs(output_dir, exist_ok=True)
@@ -129,6 +133,7 @@ def get_args():
     return parser.parse_args()
 
 def camera_running(stop_event):
+    
     print("[Camera] Starting camera thread...")
 
     global picam2, last_results, intrinsics, args, imx500
@@ -189,7 +194,34 @@ def camera_running(stop_event):
                 print("[Camera] No objects detected.")
             else:
                 print(f"[Camera] {len(detections)} object(s) detected.")
+            '''    
+                #NEW PART: Builds a dictionary for each detected object, and places it in ai_data_queue, and add a safeguard to avoid blocking forever
+            for det in detections:
+                label = intrinsics.label[int(det.category)]
+                ai_packet = {
+                    "type": "ai",
+                    "timestamp": time.time(),
+                    "label": label,
+                    "confidence": float(det.conf)
+                }
+                '''
+            ai_data_queue.put({
+                "timestamp": time.time(),
+                "detections": detections,
+                "metadata": metadata
+            })
+            
+            print(f"[DEBUG TX] ai_data_queue size: {ai_data_queue.qsize()}")
 
+            ''' 
+                try:
+                    ai_data_queue.put(ai_packet, timeout=1)
+                    print(f"[Camera] Queued AI data: {ai_packet}")
+                    print(f"[DEBUG TX] ai_data_queue size: {ai_data_queue.qsize()}")
+                except queue.Full:
+                    print("[Camera] AI data queue full, skipping this detection.")
+            '''
+                    
             # Draw detections and save images
             with MappedArray(request, "main") as m:
                 for det in detections:

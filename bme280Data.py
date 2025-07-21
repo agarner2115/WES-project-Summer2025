@@ -3,12 +3,12 @@ from datetime import datetime
 import smbus2
 import bme280
 
-from shared_resources import data_queue, stop_event
+from shared_resources import data_queue, stop_event, csv_queue
 
 #Constants
 I2C_BUS = smbus2.SMBus(1)  #I2C bus 1 (default for Raspberry Pi)
 BME280_ADDRESS = 0x76      #Default I2C address for BME280
-SENSOR_ID = "BME280-01"    #Optional ID for logging
+sensor_id = "BME280-01"    #Optional ID for logging
 SEA_LEVEL_PRESSURE = 1013.25  #Standard sea level pressure in hPa
 
 #Class for SensorData
@@ -43,10 +43,10 @@ def BME_running(stop_event):
                 #data.sensor_id = SENSOR_ID
 
                 #Create an instance of SensorData
-                sensor_data = SensorData(timestamp, temperature, humidity, pressure, altitude, SENSOR_ID)
+                sensor_data = SensorData(timestamp, temperature, humidity, pressure, altitude, sensor_id)
 
                 #Output to console
-                print(f"Sensor ID: {SENSOR_ID}")
+                print(f"Sensor ID: {sensor_id}")
                 print(f"Timestamp: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"Temperature: {temperature:.2f} °C")
                 print(f"Pressure: {pressure:.2f} hPa")
@@ -55,6 +55,12 @@ def BME_running(stop_event):
                 print("-" * 40)
     
                 data_queue.put(sensor_data)  # Put data in the queue
+                csv_queue.put(sensor_data)  # Put data in the queue
+
+                print(f"[DEBUG BME CODE] Data queued. Current size: {data_queue.qsize()}")
+                print(f"[Sensor] data_queue id: {id(data_queue)}")
+
+
                 time.sleep(10)  # Wait before next reading
 
     except KeyboardInterrupt:
