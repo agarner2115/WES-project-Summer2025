@@ -9,6 +9,10 @@ from picamera2 import MappedArray, Picamera2
 from picamera2.devices import IMX500
 from picamera2.devices.imx500 import (NetworkIntrinsics, postprocess_nanodet_detection)
 
+#Needed for transmitting queue data to ground station
+import queue
+from shared_resources import ai_data_queue, stop_event
+
 # Create the detected_images directory if it doesn't exist
 output_dir = 'detected_images'
 os.makedirs(output_dir, exist_ok=True)
@@ -96,10 +100,11 @@ def draw_detections(request, stream="main"):
             cv2.putText(m.array, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
             # Print the detected object and its confidence
-            print(f"Detected {labels[int(detection.category)]} with confidence {detection.conf:.2f}")
-
+            detected_msg = f"Detected {labels[int(detection.category)]} with confidence {detection.conf:.2f}"
+            print(detected_msg)
+            
             # Save the frame if confidence is high
-            if detection.conf >= 0.7:
+            if detection.conf >= 0.3:
                 save_detected_image(m.array, detection.conf, labels[int(detection.category)])
 
 def save_detected_image(frame, confidence, category):
@@ -129,6 +134,7 @@ def get_args():
     return parser.parse_args()
 
 def camera_running(stop_event):
+    
     print("[Camera] Starting camera thread...")
 
     global picam2, last_results, intrinsics, args, imx500
@@ -146,7 +152,12 @@ def camera_running(stop_event):
 
     picam2 = Picamera2(imx500.camera_num)
     config = picam2.create_preview_configuration(
-        controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
+    controls={
+        "FrameRate": intrinsics.inference_rate,
+        # "AwbMode": 1  # Enable auto white balance
+    },
+    buffer_count=12)
+
     picam2.start(config)
 
     try:
@@ -189,7 +200,7 @@ def camera_running(stop_event):
                 print("[Camera] No objects detected.")
             else:
                 print(f"[Camera] {len(detections)} object(s) detected.")
-
+                   
             # Draw detections and save images
             with MappedArray(request, "main") as m:
                 for det in detections:
@@ -198,13 +209,25 @@ def camera_running(stop_event):
                     cv2.rectangle(m.array, (x, y), (x + w, y + h), (0, 255, 0), 2)
                     cv2.putText(m.array, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-                    print(f"Detected {intrinsics.labels[int(det.category)]} with confidence {det.conf:.2f}")
+                    detected_msg = f"Detected {intrinsics.labels[int(det.category)]} with confidence {det.conf:.2f}"
+                    print(detected_msg)
 
-                    if det.conf >= 0.6:
+                    if det.conf >= 0.3:
                         filename = f"detected_{intrinsics.labels[int(det.category)]}_{int(time.time())}_{int(det.conf*100)}.jpg"
                         filepath = os.path.join(output_dir, filename)
                         cv2.imwrite(filepath, m.array)
+                        
                         print(f"Image saved: {filepath}")
+                        
+                        ai_data_queue.put(filepath)
+                        print(f"[DEBUG ODC] Image filename added to queue: {filepath}")            
+                        
+                        '''
+                        filepath_str = str(filepath)
+                        ai_data_queue.put(filepath_str)
+
+                        print(f"[DEBUG ODC] ai_data_queue size: {ai_data_queue.qsize()}")
+                        '''
 
             request.release()
 
