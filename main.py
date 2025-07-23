@@ -57,7 +57,7 @@ def main():
         print(f"[Main] Started thread: {t.name}")
 
     try:
-            while True:
+            while any(t.is_alive() for t in threads):
                 time.sleep(1)
     except KeyboardInterrupt:
             print("[Main] KeyboardInterrupt received, shutting down...")
@@ -65,7 +65,7 @@ def main():
     
     #Wait for threads to complete
     for t in threads:
-        t.join()
+        t.join(timeout=5)
         print(f"[Main] Thread {t.name} finished.")
 
 if __name__ == "__main__":
