@@ -17,23 +17,21 @@ def loraTX_running(stop_event):
     print(f"[LoRa TX] Starting. Serial port open: {lora.is_open}")
     try:
         while not stop_event.is_set():
-            message_sent = False
-            print(f"[DEBUG TX] data_queue size: {data_queue.qsize()}")
-            print(f"[DEBUG TX] ai_data_queue size: {ai_data_queue.qsize()}")
-            print(f"[TX] data_queue id: {id(data_queue)}")
 
-
-            # Send AI data if available
-            if not ai_data_queue.empty():
-                ai_data_to_send = ai_data_queue.get()
-                msg = ai_data_to_send + '\n'  # Append newline
-                lora.write(msg.encode('utf-8'))
-                print(f"[LoRa TX] Sent AI Data: {ai_data_to_send}")
+        # Send AI data if available
+            while not ai_data_queue.empty():
+                print(f"[DEBUG TX] ai_data_queue size: {ai_data_queue.qsize()}")
+                ai_msg = ai_data_queue.get()
+                lora.write(ai_msg.encode('utf-8'))
+                print(f"[LoRa TX] Sent AI Data: {ai_msg}")
                 message_sent = True
-
+                
+                time.sleep(2)
+                
             # Otherwise send sensor data if available
 
-            elif not data_queue.empty():
+            while not data_queue.empty():
+                print(f"[DEBUG TX] data_queue size: {data_queue.qsize()}")
                 sensor_data_obj = data_queue.get()
                 data_to_send = (
                     f"Temperature: {sensor_data_obj.temperature:.2f}°C, "
@@ -44,10 +42,13 @@ def loraTX_running(stop_event):
                 lora.write(data_to_send.encode('utf-8'))
                 print(f"[LoRa TX] Sent BME280 Data: {data_to_send.strip()}")
                 message_sent = True
+                    
+                    # Wait 10 seconds after each transmission cycle
+                time.sleep(10)
 
             # If no data, wait a bit before checking again
-            if not message_sent:
-                time.sleep(1)
+        if not message_sent:
+            time.sleep(1)
 
     except Exception as e:
         print(f"[LoRa TX] Error: {e}")
