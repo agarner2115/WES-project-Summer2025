@@ -69,12 +69,14 @@ def loraRX_running():
                             print(f"[LoRa RX] Script '{script_name}' not found.")
 
                     # Handle AI detection messages
-                    elif line.startswith("detected_images/"):
+                    elif "/detected_" in line and line.endswith(".jpg"):
+                        print("\n")  # Add a blank line for easy readabilty
                         print(f"[LoRa RX] AI Detection message received: {line}")  # Debug: Show AI detection message
                         handle_ai_detection(line)
                     
                     # Handle sensor data lines
                     elif line.startswith("Temperature:"):
+                        print("\n")  # Add a blank line for easy readabilty
                         parse_and_plot(line) 
 
                     else:
