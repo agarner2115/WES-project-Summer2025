@@ -95,10 +95,11 @@ def handle_ai_detection(ai_message_string: str):
         print(f"[AI Detection] Received message: {ai_message_string}")  # Debug: Show received message
         
         # Remove the "detected_images/" prefix
-        content = ai_message_string.replace("detected_images/", "").strip()
-        
+        filename = os.path.basename(ai_message_string)
+        # Remove extension
+        base_name = os.path.splitext(filename)[0]
         # Split the content to get the filename
-        parts = content.split('_')  # Split by underscore
+        parts = base_name.split('_')  # Split by underscore
         
         if len(parts) < 4:  # Ensure there are enough parts
             raise ValueError("Incomplete AI detection data")
@@ -107,12 +108,12 @@ def handle_ai_detection(ai_message_string: str):
         detected_object = parts[1]  # e.g., "cat"
         
         # Confidence is the number before .jpg, so we split it at '.' and take the first part
-        confidence = float(parts[3].split('.')[0])  # e.g., "56" (before the .jpg)
+        confidence = float(parts[3].split('.')[0]) / 100.0  # e.g., "56" (before the .jpg)
 
         # Get live timestamp
         timestamp = datetime.now()
         
-        print(f"[AI Detection] Detected '{detected_object}' with confidence {confidence}")
+        print(f"[AI Detection] Detected '{detected_object}' with confidence {confidence:.2f}")
         log_ai_detection_to_csv(timestamp, detected_object, confidence)  # Log with current timestamp
 
     except Exception as e:
